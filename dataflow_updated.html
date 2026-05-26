@@ -1,0 +1,1718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lss Updated – Interactive Data Flow Trace</title>
+<style>
+  :root {
+    --bg: #fdf6e3;
+    --surface: #eee8d5;
+    --border: #c5bda5;
+    --text: #586e75;
+    --text-muted: #93a1a1;
+    --accent-blue: #268bd2;
+    --accent-green: #859900;
+    --accent-orange: #cb4b16;
+    --accent-purple: #6c71c4;
+    --accent-red: #dc322f;
+    --accent-cyan: #2aa198;
+    --accent-pink: #d33682;
+    --new-feature: #859900;
+    --new-bg: rgba(133, 153, 0, 0.08);
+    --changed-bg: rgba(203, 75, 22, 0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #eee8d5 0%, #fdf6e3 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header h1 { font-size: 20px; color: var(--accent-blue); margin-bottom: 4px; }
+  .header .subtitle { font-size: 13px; color: var(--text-muted); }
+  .header .new-badge {
+    display: inline-block;
+    background: var(--new-feature);
+    color: #fdf6e3;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* Navigation tabs */
+  .nav {
+    display: flex;
+    gap: 2px;
+    padding: 12px 32px 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .nav button {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .nav button:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+  .nav button.active {
+    color: var(--accent-blue);
+    background: var(--bg);
+    border-color: var(--border);
+  }
+  .nav button .pill {
+    display: inline-block;
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .nav button .pill-new { background: var(--new-feature); color: #fdf6e3; }
+  .nav button .pill-changed { background: var(--accent-orange); color: #fdf6e3; }
+
+  /* Main content */
+  .content { max-width: 1400px; margin: 0 auto; padding: 24px 32px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Section cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .card.new-feature { border-color: rgba(133,153,0,0.4); }
+  .card.changed { border-color: rgba(203,75,22,0.4); }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-header:hover { background: rgba(0,0,0,0.03); }
+  .card-header .arrow {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    width: 12px;
+  }
+  .card-header .arrow.open { transform: rotate(90deg); }
+  .card-header .file-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(38,139,210,0.12);
+    color: var(--accent-blue);
+  }
+  .card-header .tag-new {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(133,153,0,0.12);
+    color: var(--new-feature);
+  }
+  .card-header .tag-changed {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(203,75,22,0.12);
+    color: var(--accent-orange);
+  }
+  .card-header h3 { font-size: 14px; flex: 1; }
+  .card-body { padding: 16px; }
+  .card-body.collapsed { display: none; }
+
+  /* Code blocks */
+  pre {
+    background: #fdf6e3;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 8px 0;
+    position: relative;
+  }
+  pre .line-new {
+    background: rgba(133,153,0,0.12);
+    display: inline-block;
+    width: calc(100% + 32px);
+    margin-left: -16px;
+    padding-left: 16px;
+  }
+  pre .line-changed {
+    background: rgba(203,75,22,0.12);
+    display: inline-block;
+    width: calc(100% + 32px);
+    margin-left: -16px;
+    padding-left: 16px;
+  }
+  .kw { color: #859900; }
+  .fn { color: #268bd2; }
+  .str { color: #2aa198; }
+  .cmt { color: #93a1a1; font-style: italic; }
+  .cls { color: #cb4b16; }
+  .var { color: #268bd2; }
+  .num { color: #d33682; }
+  .op { color: #859900; }
+  .type { color: #b58900; }
+  .dec { color: #6c71c4; }
+  .new-hl { color: var(--new-feature); font-weight: bold; }
+  .changed-hl { color: var(--accent-orange); font-weight: bold; }
+
+  /* Flow diagrams */
+  .flow-container {
+    overflow-x: auto;
+    padding: 16px 0;
+  }
+  .flow-diagram {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: max-content;
+    padding: 8px;
+  }
+  .flow-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    min-width: 180px;
+    max-width: 260px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .flow-box:hover {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 12px rgba(38,139,210,0.2);
+    transform: translateY(-2px);
+  }
+  .flow-box.highlighted {
+    border-color: var(--accent-blue);
+    background: rgba(38,139,210,0.06);
+    box-shadow: 0 0 16px rgba(38,139,210,0.2);
+  }
+  .flow-box.new-feature {
+    border-color: rgba(133,153,0,0.5);
+  }
+  .flow-box.new-feature:hover, .flow-box.new-feature.highlighted {
+    border-color: var(--new-feature);
+    box-shadow: 0 0 12px rgba(133,153,0,0.2);
+  }
+  .flow-box .box-title {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .flow-box .box-detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .flow-box .box-file {
+    font-size: 10px;
+    color: var(--accent-purple);
+    margin-top: 6px;
+  }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 6px;
+    color: var(--text-muted);
+    font-size: 18px;
+    min-width: 30px;
+    justify-content: center;
+    align-self: center;
+  }
+  .flow-arrow.new-arrow { color: var(--new-feature); }
+
+  /* Data trace table */
+  .trace-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin: 12px 0;
+  }
+  .trace-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: rgba(0,0,0,0.04);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .trace-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(48,54,61,0.5);
+    vertical-align: top;
+  }
+  .trace-table tr:hover { background: rgba(0,0,0,0.03); }
+  .trace-table tr.new-row { background: var(--new-bg); }
+  .trace-table tr.changed-row { background: var(--changed-bg); }
+  .trace-table .mono { font-family: inherit; color: var(--accent-cyan); }
+
+  /* Interactive scenario runner */
+  .scenario-runner {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+  }
+  .scenario-controls {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .scenario-btn {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 14px;
+    background: rgba(38,139,210,0.08);
+    color: var(--accent-blue);
+    border: 1px solid rgba(38,139,210,0.3);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .scenario-btn:hover {
+    background: rgba(38,139,210,0.15);
+    border-color: var(--accent-blue);
+  }
+  .scenario-btn.active {
+    background: var(--accent-blue);
+    color: #fdf6e3;
+    font-weight: 600;
+  }
+  .scenario-btn.new-scenario {
+    background: rgba(133,153,0,0.08);
+    color: var(--new-feature);
+    border-color: rgba(133,153,0,0.3);
+  }
+  .scenario-btn.new-scenario:hover {
+    background: rgba(133,153,0,0.15);
+    border-color: var(--new-feature);
+  }
+  .scenario-btn.new-scenario.active {
+    background: var(--new-feature);
+    color: #fdf6e3;
+  }
+
+  /* Step-by-step animation */
+  .step-container { margin: 12px 0; }
+  .step {
+    display: flex;
+    gap: 12px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--border);
+    margin-bottom: 4px;
+    transition: all 0.3s;
+    opacity: 0.4;
+  }
+  .step.active {
+    opacity: 1;
+    border-left-color: var(--accent-blue);
+    background: rgba(38,139,210,0.06);
+  }
+  .step.completed {
+    opacity: 0.7;
+    border-left-color: var(--accent-green);
+  }
+  .step.new-step.active {
+    border-left-color: var(--new-feature);
+    background: var(--new-bg);
+  }
+  .step .step-num {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent-blue);
+    min-width: 24px;
+  }
+  .step.new-step .step-num { color: var(--new-feature); }
+  .step .step-content { flex: 1; }
+  .step .step-label { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .step .step-data {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(0,0,0,0.05);
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-top: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .step .step-file { font-size: 10px; color: var(--accent-purple); margin-top: 4px; }
+
+  /* Playback controls */
+  .playback {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .play-btn {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 16px;
+    background: var(--accent-blue);
+    color: #fdf6e3;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.15s;
+  }
+  .play-btn:hover { opacity: 0.85; }
+  .play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .step-indicator { font-size: 12px; color: var(--text-muted); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    padding: 12px 16px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 6px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* Comparison view */
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .comparison .col-header {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 12px;
+    border-radius: 6px 6px 0 0;
+    margin-bottom: -8px;
+  }
+  .comparison .col-baseline {
+    background: rgba(0,0,0,0.05);
+    color: var(--text-muted);
+  }
+  .comparison .col-updated {
+    background: rgba(133,153,0,0.1);
+    color: var(--new-feature);
+  }
+
+  @media (max-width: 900px) {
+    .comparison { grid-template-columns: 1fr; }
+    .flow-diagram { flex-direction: column; align-items: stretch; }
+    .flow-arrow { transform: rotate(90deg); align-self: center; }
+    .content { padding: 16px; }
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    background: #eee8d5;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+    max-width: 320px;
+    z-index: 200;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* Colorama preview */
+  .color-preview {
+    background: #002b36;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.8;
+    margin: 8px 0;
+  }
+  .cp-cyan { color: #2aa198; }
+  .cp-bright { color: #eee8d5; font-weight: bold; }
+  .cp-green { color: #859900; }
+  .cp-yellow { color: #b58900; }
+  .cp-red { color: #dc322f; }
+  .cp-reset { color: #93a1a1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>lss Data Flow Trace <span class="new-badge">UPDATED VERSION</span></h1>
+  <div class="subtitle">Interactive trace of all 6 feature enhancements &middot; merged into master from feature/enhancements</div>
+</div>
+
+<div class="nav" id="nav">
+  <button class="active" onclick="showPanel('overview')">Overview</button>
+  <button onclick="showPanel('architecture')">Architecture <span class="pill pill-changed">changed</span></button>
+  <button onclick="showPanel('parser')">Parser <span class="pill pill-changed">changed</span></button>
+  <button onclick="showPanel('directory')">Directory <span class="pill pill-new">new</span></button>
+  <button onclick="showPanel('sorting')">Sorting <span class="pill pill-new">new</span></button>
+  <button onclick="showPanel('color')">Color Output <span class="pill pill-new">new</span></button>
+  <button onclick="showPanel('trace')">Full Trace</button>
+  <button onclick="showPanel('scenarios')">Scenarios</button>
+  <button onclick="showPanel('diff')">Baseline vs Updated</button>
+</div>
+
+<div class="content">
+
+<!-- ==================== OVERVIEW PANEL ==================== -->
+<div class="panel active" id="panel-overview">
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--accent-blue)"></div> Baseline (unchanged)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--new-feature)"></div> New feature</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--accent-orange)"></div> Changed/extended</div>
+  </div>
+
+  <h2 style="font-size:16px; margin-bottom:16px;">High-Level Data Flow</h2>
+
+  <div class="flow-container">
+    <div class="flow-diagram">
+      <div class="flow-box" onclick="showPanel('trace')" id="fb-argv">
+        <div class="box-title" style="color:var(--accent-orange);">argv / CLI args</div>
+        <div class="box-detail">path, -s/--sort, -r/--reverse, --color, -a, -L</div>
+        <div class="box-file">cli.py:main()</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-box" onclick="showPanel('trace')">
+        <div class="box-title">argparse</div>
+        <div class="box-detail">Parses into args.path, args.sort_by, args.reverse, args.color, ...</div>
+        <div class="box-file">cli.py:96-144</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-box" onclick="showPanel('trace')">
+        <div class="box-title">list_directory()</div>
+        <div class="box-detail">Path &rarr; (files[], errors[])</div>
+        <div class="box-file">cli.py:32-73</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-box" onclick="showPanel('sorting')" style="border-color:rgba(203,75,22,0.5);">
+        <div class="box-title" style="color:var(--accent-orange);">group_files()</div>
+        <div class="box-detail">filenames + sort_by + reverse &rarr; sorted [FileSequence|str]</div>
+        <div class="box-file">grouper.py</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-box new-feature" onclick="showPanel('color')">
+        <div class="box-title" style="color:var(--new-feature);">format_output()</div>
+        <div class="box-detail">item + use_color &rarr; plain or ANSI-colored string</div>
+        <div class="box-file">cli.py:76-92</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-box">
+        <div class="box-title">print()</div>
+        <div class="box-detail">stdout, one line per item</div>
+        <div class="box-file">cli.py:173</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:24px;">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <h3>What changed from the baseline?</h3>
+    </div>
+    <div class="card-body">
+      <table class="trace-table">
+        <tr><th>Commit</th><th>Feature</th><th>Status</th><th>What's new</th></tr>
+        <tr class="changed-row"><td class="mono">f782725</td><td>Multiple numeric segments</td><td style="color:var(--accent-orange)">changed</td><td>Non-greedy regex <code class="mono">(.*?)</code> captures last numeric segment, so <code class="mono">shot_01_v002.0001.exr</code> works correctly</td></tr>
+        <tr class="changed-row"><td class="mono">84bcfbb</td><td>Negative frame numbers</td><td style="color:var(--accent-orange)">changed</td><td>Regex accepts <code class="mono">(-?\d+)</code>; padding detection strips minus sign</td></tr>
+        <tr class="new-row"><td class="mono">c744730</td><td>Hidden files &amp; symlinks</td><td style="color:var(--new-feature)">new</td><td><code class="mono">-a/--all</code> for dotfiles, <code class="mono">-L/--follow-symlinks</code> in list_directory()</td></tr>
+        <tr class="new-row"><td class="mono">0a44ead</td><td>Permission error handling</td><td style="color:var(--new-feature)">new</td><td>Per-file errors reported to stderr; list_directory() returns <code class="mono">(files, errors)</code> tuple</td></tr>
+        <tr class="new-row"><td class="mono">a39cab8</td><td>Sorting options</td><td style="color:var(--new-feature)">new</td><td><code class="mono">-s/--sort</code> [name|frame|count|extension], <code class="mono">-r/--reverse</code>; SortOrder class + sort_key in group_files()</td></tr>
+        <tr class="new-row"><td class="mono">a154eb8</td><td>Color output</td><td style="color:var(--new-feature)">new</td><td><code class="mono">--color</code> [auto|always|never]; colorama optional dep with fallback; format_output() decomposition</td></tr>
+        <tr class="changed-row"><td></td><td>lsslib/__init__.py</td><td style="color:var(--accent-orange)">changed</td><td>Exports <code class="mono">SortOrder</code></td></tr>
+        <tr><td></td><td>sequence.py</td><td style="color:var(--text-muted)">unchanged</td><td>Same formatting logic (used directly by format_output for color)</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ARCHITECTURE PANEL ==================== -->
+<div class="panel" id="panel-architecture">
+  <h2 style="font-size:16px; margin-bottom:16px;">Updated Module Architecture</h2>
+
+  <div class="card changed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">lsslib/__init__.py</span>
+      <span class="tag-changed">changed</span>
+      <h3>Public API</h3>
+    </div>
+    <div class="card-body">
+      <pre><span class="cmt">"""lsslib - Library for grouping files into sequences."""</span>
+
+<span class="kw">from</span> lsslib.parser <span class="kw">import</span> ParsedFile, parse_filename
+<span class="kw">from</span> lsslib.sequence <span class="kw">import</span> FileSequence
+<span class="kw">from</span> lsslib.grouper <span class="kw">import</span> group_files, <span class="line-new"><span class="new-hl">SortOrder</span></span>
+
+__all__ = [
+    <span class="str">"ParsedFile"</span>,
+    <span class="str">"parse_filename"</span>,
+    <span class="str">"FileSequence"</span>,
+    <span class="str">"group_files"</span>,
+<span class="line-new">    <span class="str">"SortOrder"</span>,</span>
+]</pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        <strong>SortOrder</strong> is now part of the library's public API, importable from <code>lsslib</code>.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">Module dependency graph</span>
+      <h3>Import Flow</h3>
+    </div>
+    <div class="card-body">
+<pre style="font-size:13px; line-height:2;">
+<span class="cls">cli.py</span>
+  ├── <span class="kw">import</span> argparse, os, sys, pathlib
+  ├── <span class="kw">from</span> lsslib <span class="kw">import</span> FileSequence, group_files, <span class="new-hl">SortOrder</span>
+  └── <span class="new-hl"><span class="kw">try</span>: <span class="kw">import</span> colorama  <span class="cmt"># optional dependency</span></span>
+
+<span class="cls">lsslib/__init__.py</span>
+  ├── <span class="kw">from</span> .parser <span class="kw">import</span> ParsedFile, parse_filename
+  ├── <span class="kw">from</span> .sequence <span class="kw">import</span> FileSequence
+  └── <span class="kw">from</span> .grouper <span class="kw">import</span> group_files, <span class="new-hl">SortOrder</span>
+
+<span class="cls">grouper.py</span>
+  ├── <span class="kw">from</span> .parser <span class="kw">import</span> ParsedFile, parse_filename
+  └── <span class="kw">from</span> .sequence <span class="kw">import</span> FileSequence
+
+<span class="cls">parser.py</span>   ← no internal deps (leaf module)
+<span class="cls">sequence.py</span> ← no internal deps (leaf module)
+</pre>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PARSER PANEL ==================== -->
+<div class="panel" id="panel-parser">
+  <h2 style="font-size:16px; margin-bottom:16px;">Parser – Negative Frames &amp; Multiple Numeric Segments</h2>
+
+  <div class="card changed">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">parser.py</span>
+      <span class="tag-changed">changed</span>
+      <h3>Regex pattern update</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># Pattern: capture everything up to the last number before extension</span>
+<span class="cmt"># Groups: (base)(frame with optional negative sign)(extension including dot)</span>
+_SEQUENCE_PATTERN = re.compile(
+    <span class="str">r"^<span class="changed-hl">(.*?)</span><span class="new-hl">(-?\d+)</span>(\.[^.]+)$"</span>
+)</pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:12px;"><strong>Two key changes from baseline:</strong></p>
+      <ul style="font-size:12px; color:var(--text-muted); padding-left:20px; margin-top:4px; line-height:2;">
+        <li><code class="mono">(.*?)</code> &mdash; Non-greedy base capture. Matches as <em>little</em> as possible, so the <strong>last</strong> numeric segment becomes the frame number. This allows filenames with multiple numbers in the base (e.g. <code>shot_01_v002.</code>)</li>
+        <li><code class="mono">(-?\d+)</code> &mdash; Optional minus sign before digits. Enables negative frame numbers like <code>-0010</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">parser.py</span>
+      <span class="tag-new">new</span>
+      <h3>Multiple numeric segments – how it works</h3>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">The non-greedy <code>(.*?)</code> ensures the regex always captures the <strong>last</strong> number as the frame:</p>
+      <table class="trace-table">
+        <tr><th>Input filename</th><th>base</th><th>frame</th><th>padding</th><th>extension</th></tr>
+        <tr>
+          <td class="mono">shot_01_v002.0001.exr</td>
+          <td class="mono" style="color:var(--accent-cyan)">shot_01_v002.</td>
+          <td class="mono" style="color:var(--accent-blue)">1</td>
+          <td class="mono">4</td>
+          <td class="mono" style="color:var(--new-feature)">.exr</td>
+        </tr>
+        <tr>
+          <td class="mono">render_v03.100.png</td>
+          <td class="mono" style="color:var(--accent-cyan)">render_v03.</td>
+          <td class="mono" style="color:var(--accent-blue)">100</td>
+          <td class="mono">0</td>
+          <td class="mono" style="color:var(--new-feature)">.png</td>
+        </tr>
+        <tr>
+          <td class="mono">foo.0004.exr</td>
+          <td class="mono" style="color:var(--accent-cyan)">foo.</td>
+          <td class="mono" style="color:var(--accent-blue)">4</td>
+          <td class="mono">4</td>
+          <td class="mono" style="color:var(--new-feature)">.exr</td>
+        </tr>
+      </table>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        The numbers <code>01</code>, <code>002</code>, <code>v03</code> in the base are preserved as part of the grouping key &mdash; only the <em>last</em> number before the extension is treated as the frame.
+      </p>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">parser.py</span>
+      <span class="tag-new">new</span>
+      <h3>Negative frame numbers – padding detection</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># For negative numbers, check the digit portion after the minus sign</span>
+<span class="new-hl">digits = frame_str.lstrip(<span class="str">"-"</span>)</span>
+<span class="kw">if</span> <span class="fn">len</span>(digits) > <span class="num">1</span> <span class="kw">and</span> digits[<span class="num">0</span>] == <span class="str">"0"</span>:
+    padding = <span class="fn">len</span>(digits)
+<span class="kw">else</span>:
+    padding = <span class="num">0</span></pre>
+      <table class="trace-table">
+        <tr><th>Input filename</th><th>frame_str</th><th>digits (after lstrip)</th><th>frame</th><th>padding</th></tr>
+        <tr>
+          <td class="mono">render.-0010.exr</td>
+          <td class="mono">-0010</td>
+          <td class="mono">0010</td>
+          <td class="mono">-10</td>
+          <td class="mono">4</td>
+        </tr>
+        <tr>
+          <td class="mono">anim.-5.exr</td>
+          <td class="mono">-5</td>
+          <td class="mono">5</td>
+          <td class="mono">-5</td>
+          <td class="mono">0</td>
+        </tr>
+        <tr>
+          <td class="mono">fx.0000.exr</td>
+          <td class="mono">0000</td>
+          <td class="mono">0000</td>
+          <td class="mono">0</td>
+          <td class="mono">4</td>
+        </tr>
+      </table>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        Padding is determined by the digit portion <em>only</em>, ignoring the minus sign. This means <code>-0010</code> has padding=4 (the <code>0010</code> part), matching positive frames with the same zero-padding.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DIRECTORY PANEL ==================== -->
+<div class="panel" id="panel-directory">
+  <h2 style="font-size:16px; margin-bottom:16px;">Directory Listing – Hidden Files, Symlinks &amp; Error Handling</h2>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-changed">changed</span>
+      <h3>list_directory() – updated signature</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="kw">def</span> <span class="fn">list_directory</span>(
+    path: <span class="type">Path</span>,
+<span class="line-new">    include_hidden: <span class="type">bool</span> = <span class="kw">False</span>,</span>
+<span class="line-new">    follow_symlinks: <span class="type">bool</span> = <span class="kw">False</span>,</span>
+<span class="line-changed">) -> <span class="type">tuple</span>[<span class="type">list</span>[<span class="type">str</span>], <span class="type">list</span>[<span class="type">str</span>]]:</span></pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        <strong>Baseline</strong> returned <code>list[str]</code> (just filenames). <strong>Updated</strong> returns a <code>(files, errors)</code> tuple so the caller can report errors to stderr while continuing.
+      </p>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-new">new</span>
+      <h3>Hidden files – <code>-a / --all</code></h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># Skip hidden files unless requested</span>
+<span class="kw">if</span> <span class="kw">not</span> include_hidden <span class="kw">and</span> entry.name.startswith(<span class="str">"."</span>):
+    <span class="kw">continue</span></pre>
+      <table class="trace-table">
+        <tr><th>Flag</th><th>Entry name</th><th>Included?</th></tr>
+        <tr><td>(default)</td><td class="mono">.hidden_file</td><td style="color:var(--accent-red)">No</td></tr>
+        <tr><td class="mono">-a</td><td class="mono">.hidden_file</td><td style="color:var(--new-feature)">Yes</td></tr>
+        <tr><td>(default)</td><td class="mono">visible.exr</td><td style="color:var(--new-feature)">Yes</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-new">new</span>
+      <h3>Symlink following – <code>-L / --follow-symlinks</code></h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># Check if it's a file (respecting symlink preference)</span>
+<span class="kw">if</span> entry.<span class="fn">is_file</span>(<span class="new-hl">follow_symlinks=follow_symlinks</span>):
+    files.append(entry.name)
+<span class="cmt"># Also include symlinks to files when following symlinks</span>
+<span class="kw">elif</span> follow_symlinks <span class="kw">and</span> entry.<span class="fn">is_symlink</span>():
+    <span class="kw">try</span>:
+        <span class="kw">if</span> entry.<span class="fn">resolve</span>().<span class="fn">is_file</span>():
+            files.append(entry.name)
+    <span class="kw">except</span> (<span class="cls">OSError</span>, <span class="cls">ValueError</span>):
+        <span class="kw">pass</span>  <span class="cmt"># Broken symlink - skip</span></pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        Without <code>-L</code>, symlinks are not resolved. With <code>-L</code>, symlinks pointing to files are included; broken symlinks are silently skipped.
+      </p>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-new">new</span>
+      <h3>Permission error handling – per-file recovery</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># Directory-level errors</span>
+<span class="kw">try</span>:
+    entries = <span class="fn">list</span>(path.<span class="fn">iterdir</span>())
+<span class="kw">except</span> <span class="cls">PermissionError</span>:
+    <span class="kw">return</span> [], [<span class="str">f"lss: cannot open directory '{path}': Permission denied"</span>]
+
+<span class="cmt"># Per-file errors (continue processing)</span>
+<span class="kw">for</span> entry <span class="kw">in</span> entries:
+    <span class="kw">try</span>:
+        <span class="kw">if</span> entry.<span class="fn">is_file</span>(...):
+            files.append(entry.name)
+    <span class="kw">except</span> <span class="cls">PermissionError</span>:
+<span class="line-new">        errors.append(<span class="str">f"lss: cannot access '{entry.name}': Permission denied"</span>)</span>
+    <span class="kw">except</span> <span class="cls">OSError</span> <span class="kw">as</span> e:
+<span class="line-new">        errors.append(<span class="str">f"lss: cannot access '{entry.name}': {e.strerror}"</span>)</span></pre>
+
+      <h4 style="font-size:13px; margin-top:16px; margin-bottom:8px;">Error flow in main():</h4>
+<pre><span class="cmt"># Report errors to stderr but continue</span>
+<span class="kw">for</span> error <span class="kw">in</span> errors:
+    <span class="fn">print</span>(error, file=sys.stderr)
+
+<span class="cmt"># Exit with error only if we got nothing</span>
+<span class="kw">if</span> <span class="kw">not</span> filenames <span class="kw">and</span> errors:
+    <span class="kw">return</span> <span class="num">1</span>
+
+<span class="cmt"># Non-zero exit if there were any errors (like ls does)</span>
+<span class="kw">return</span> <span class="num">1</span> <span class="kw">if</span> errors <span class="kw">else</span> <span class="num">0</span></pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        This mirrors <code>ls</code> behavior: report per-file permission errors to stderr, but still process and display the files that <em>can</em> be read. Exit code reflects whether any errors occurred.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SORTING PANEL ==================== -->
+<div class="panel" id="panel-sorting">
+  <h2 style="font-size:16px; margin-bottom:16px;">Sorting Options – New Feature Deep Dive</h2>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">grouper.py</span>
+      <span class="tag-new">new</span>
+      <h3>SortOrder class</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="kw">class</span> <span class="cls">SortOrder</span>:
+    <span class="cmt">"""Sort order options for group_files output."""</span>
+    <span class="var">NAME</span>      = <span class="str">"name"</span>       <span class="cmt"># Alphabetical by name (default)</span>
+    <span class="var">FRAME</span>     = <span class="str">"frame"</span>      <span class="cmt"># By first frame number</span>
+    <span class="var">COUNT</span>     = <span class="str">"count"</span>      <span class="cmt"># By number of frames in sequence</span>
+    <span class="var">EXTENSION</span> = <span class="str">"extension"</span>  <span class="cmt"># By file extension</span></pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        Plain class with string constants. Used as enum-like values for <code>argparse choices</code> and the <code>sort_key</code> function.
+      </p>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">grouper.py</span>
+      <span class="tag-changed">changed</span>
+      <h3>group_files() – new signature & sort logic</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="kw">def</span> <span class="fn">group_files</span>(
+    filenames: <span class="type">list</span>[<span class="type">str</span>],
+<span class="line-new">    sort_by: <span class="type">str</span> = SortOrder.NAME,</span>
+<span class="line-new">    reverse: <span class="type">bool</span> = <span class="kw">False</span>,</span>
+) -> <span class="type">list</span>[FileSequence | <span class="type">str</span>]:
+    <span class="cmt"># ... grouping logic unchanged ...</span>
+
+<span class="line-new">    <span class="cmt"># Build sort key based on sort_by option</span></span>
+<span class="line-new">    <span class="kw">def</span> <span class="fn">sort_key</span>(item: FileSequence | <span class="type">str</span>) -> <span class="type">tuple</span>:</span>
+<span class="line-new">        <span class="kw">if</span> <span class="kw">isinstance</span>(item, FileSequence):</span>
+<span class="line-new">            name      = item.format()</span>
+<span class="line-new">            first_frame = <span class="fn">min</span>(item.frames) <span class="kw">if</span> item.frames <span class="kw">else</span> <span class="num">0</span></span>
+<span class="line-new">            count     = <span class="fn">len</span>(item.frames)</span>
+<span class="line-new">            extension = item.extension.lower()</span>
+<span class="line-new">        <span class="kw">else</span>:</span>
+<span class="line-new">            name      = item</span>
+<span class="line-new">            first_frame = <span class="num">0</span></span>
+<span class="line-new">            count     = <span class="num">1</span></span>
+<span class="line-new">            extension = item.rsplit(<span class="str">"."</span>, <span class="num">1</span>)[-<span class="num">1</span>].lower() <span class="kw">if</span> <span class="str">"."</span> <span class="kw">in</span> item <span class="kw">else</span> <span class="str">""</span></span>
+<span class="line-new"></span>
+<span class="line-new">        <span class="kw">if</span> sort_by == SortOrder.FRAME:</span>
+<span class="line-new">            <span class="kw">return</span> (first_frame, name)</span>
+<span class="line-new">        <span class="kw">elif</span> sort_by == SortOrder.COUNT:</span>
+<span class="line-new">            <span class="kw">return</span> (count, name)</span>
+<span class="line-new">        <span class="kw">elif</span> sort_by == SortOrder.EXTENSION:</span>
+<span class="line-new">            <span class="kw">return</span> (extension, name)</span>
+<span class="line-new">        <span class="kw">else</span>:  <span class="cmt"># Default to NAME</span></span>
+<span class="line-new">            <span class="kw">return</span> (name,)</span>
+<span class="line-new"></span>
+<span class="line-new">    result.sort(key=sort_key, reverse=reverse)</span></pre>
+
+      <p style="font-size:12px; color:var(--text-muted); margin-top:12px;"><strong>Key design decisions:</strong></p>
+      <ul style="font-size:12px; color:var(--text-muted); padding-left:20px; margin-top:4px; line-height:2;">
+        <li>Sort key always returns a <strong>tuple</strong> – secondary sort is always by name for stability</li>
+        <li>Plain strings (non-sequence files) get sensible defaults: frame=0, count=1</li>
+        <li><code>reverse</code> passed directly to <code>list.sort()</code> – no manual inversion</li>
+        <li>The old baseline had a simple <code>result.sort(key=lambda x: ...)</code> by name only</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-new">new</span>
+      <h3>CLI arguments for sorting</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># How --sort and --reverse are wired in argparse</span>
+
+parser.add_argument(
+    <span class="str">"-s"</span>, <span class="str">"--sort"</span>,
+    choices=[SortOrder.NAME, SortOrder.FRAME,
+             SortOrder.COUNT, SortOrder.EXTENSION],
+    default=SortOrder.NAME,
+    dest=<span class="str">"sort_by"</span>,
+)
+parser.add_argument(
+    <span class="str">"-r"</span>, <span class="str">"--reverse"</span>,
+    action=<span class="str">"store_true"</span>,
+    dest=<span class="str">"reverse"</span>,
+)
+
+<span class="cmt"># Then passed straight through:</span>
+grouped = group_files(filenames,
+                      sort_by=args.sort_by,
+                      reverse=args.reverse)</pre>
+
+      <h4 style="font-size:13px; margin-top:16px; margin-bottom:8px;">Sort data flow:</h4>
+      <div class="flow-container">
+        <div class="flow-diagram">
+          <div class="flow-box new-feature">
+            <div class="box-title" style="color:var(--new-feature)">User types</div>
+            <div class="box-detail">lss -s count -r ./renders</div>
+          </div>
+          <div class="flow-arrow new-arrow">&rarr;</div>
+          <div class="flow-box new-feature">
+            <div class="box-title" style="color:var(--new-feature)">argparse</div>
+            <div class="box-detail">sort_by="count"<br>reverse=True</div>
+          </div>
+          <div class="flow-arrow new-arrow">&rarr;</div>
+          <div class="flow-box new-feature">
+            <div class="box-title" style="color:var(--new-feature)">group_files()</div>
+            <div class="box-detail">sort_key returns<br>(frame_count, name)<br>reverse=True</div>
+          </div>
+          <div class="flow-arrow new-arrow">&rarr;</div>
+          <div class="flow-box new-feature">
+            <div class="box-title" style="color:var(--new-feature)">result.sort()</div>
+            <div class="box-detail">Longest sequences first<br>(reversed count order)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <h3>Interactive: Sort key computation</h3>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Select a sort mode to see what tuple is computed for each item:</p>
+      <div class="scenario-controls">
+        <button class="scenario-btn new-scenario active" onclick="showSortDemo('name')">name (default)</button>
+        <button class="scenario-btn new-scenario" onclick="showSortDemo('frame')">frame</button>
+        <button class="scenario-btn new-scenario" onclick="showSortDemo('count')">count</button>
+        <button class="scenario-btn new-scenario" onclick="showSortDemo('extension')">extension</button>
+      </div>
+      <div id="sort-demo-output">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== COLOR PANEL ==================== -->
+<div class="panel" id="panel-color">
+  <h2 style="font-size:16px; margin-bottom:16px;">Color Output – New Feature Deep Dive</h2>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-new">new</span>
+      <h3>Colorama import strategy</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># Graceful import with fallback</span>
+<span class="kw">try</span>:
+    <span class="kw">import</span> colorama
+    <span class="kw">from</span> colorama <span class="kw">import</span> Fore, Style
+    COLORAMA_AVAILABLE = <span class="kw">True</span>
+<span class="kw">except</span> <span class="cls">ImportError</span>:
+    COLORAMA_AVAILABLE = <span class="kw">False</span>
+    <span class="cmt"># Dummy replacements — empty strings</span>
+    <span class="kw">class</span> <span class="cls">Fore</span>:
+        CYAN = GREEN = YELLOW = RED = RESET = <span class="str">""</span>
+    <span class="kw">class</span> <span class="cls">Style</span>:
+        BRIGHT = RESET_ALL = <span class="str">""</span></pre>
+      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">
+        <strong>Key:</strong> colorama is an <em>optional</em> dependency (declared in <code>[project.optional-dependencies]</code>).
+        When absent, <code>Fore.CYAN</code> etc. resolve to <code>""</code>, so the formatting f-strings produce plain text.
+      </p>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-new">new</span>
+      <h3>--color flag logic</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="cmt"># Three modes: auto | always | never</span>
+use_color = <span class="kw">False</span>
+
+<span class="kw">if</span> args.color == <span class="str">"always"</span>:
+    use_color = COLORAMA_AVAILABLE
+
+<span class="kw">elif</span> args.color == <span class="str">"auto"</span>:
+    use_color = COLORAMA_AVAILABLE <span class="kw">and</span> sys.stdout.isatty()
+
+<span class="cmt"># "never" → use_color stays False</span>
+
+<span class="cmt"># Windows-specific init</span>
+<span class="kw">if</span> use_color <span class="kw">and</span> COLORAMA_AVAILABLE <span class="kw">and</span> os.name == <span class="str">"nt"</span>:
+    colorama.init()</pre>
+
+      <h4 style="font-size:13px; margin-top:16px; margin-bottom:8px;">Decision matrix:</h4>
+      <table class="trace-table">
+        <tr><th>--color</th><th>colorama installed?</th><th>stdout is tty?</th><th>use_color</th></tr>
+        <tr><td class="mono">auto</td><td>yes</td><td>yes</td><td style="color:var(--new-feature)">True</td></tr>
+        <tr><td class="mono">auto</td><td>yes</td><td>no (piped)</td><td style="color:var(--accent-red)">False</td></tr>
+        <tr><td class="mono">auto</td><td>no</td><td>yes</td><td style="color:var(--accent-red)">False</td></tr>
+        <tr><td class="mono">always</td><td>yes</td><td>any</td><td style="color:var(--new-feature)">True</td></tr>
+        <tr><td class="mono">always</td><td>no</td><td>any</td><td style="color:var(--accent-red)">False</td></tr>
+        <tr><td class="mono">never</td><td>any</td><td>any</td><td style="color:var(--accent-red)">False</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card new-feature">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <span class="file-badge">cli.py</span>
+      <span class="tag-changed">changed</span>
+      <h3>format_output() – color decomposition</h3>
+    </div>
+    <div class="card-body">
+<pre><span class="kw">def</span> <span class="fn">format_output</span>(item: FileSequence | <span class="type">str</span>, <span class="new-hl">use_color: <span class="type">bool</span> = <span class="kw">False</span></span>) -> <span class="type">str</span>:
+    <span class="kw">if</span> <span class="kw">isinstance</span>(item, FileSequence):
+        formatted = item.format()
+        <span class="kw">if</span> use_color:
+<span class="line-new">            <span class="cmt"># Decompose into colored segments:</span></span>
+<span class="line-new">            <span class="cmt">#   CYAN      base       "foo."</span></span>
+<span class="line-new">            <span class="cmt">#   BRIGHT    range#pad  "0-4#4"</span></span>
+<span class="line-new">            <span class="cmt">#   GREEN     extension  ".exr"</span></span>
+<span class="line-new">            <span class="kw">return</span> (</span>
+<span class="line-new">                f<span class="str">"{Fore.CYAN}{item.base}{Style.RESET_ALL}"</span></span>
+<span class="line-new">                f<span class="str">"{Style.BRIGHT}{item._format_frame_range(sorted(item.frames))}"</span></span>
+<span class="line-new">                f<span class="str">"#{item.padding if item.padding > 0 else ''}{Style.RESET_ALL}"</span></span>
+<span class="line-new">                f<span class="str">"{Fore.GREEN}{item.extension}{Style.RESET_ALL}"</span></span>
+<span class="line-new">            )</span>
+        <span class="kw">return</span> formatted
+    <span class="kw">else</span>:
+        <span class="kw">if</span> use_color:
+<span class="line-new">            <span class="kw">return</span> f<span class="str">"{Fore.YELLOW}{item}{Style.RESET_ALL}"</span></span>
+        <span class="kw">return</span> item</pre>
+
+      <h4 style="font-size:13px; margin-top:16px; margin-bottom:8px;">Live preview – what the terminal shows:</h4>
+      <div class="color-preview">
+        <div><span class="cp-cyan">foo.</span><span class="cp-bright">0-4#4</span><span class="cp-green">.exr</span></div>
+        <div><span class="cp-cyan">bar.</span><span class="cp-bright">1-3#3</span><span class="cp-green">.exr</span></div>
+        <div><span class="cp-yellow">readme.txt</span></div>
+      </div>
+
+      <h4 style="font-size:13px; margin-top:16px; margin-bottom:8px;">Color scheme:</h4>
+      <table class="trace-table">
+        <tr><th>Part</th><th>ANSI code</th><th>Color</th><th>Example</th></tr>
+        <tr><td>Sequence base</td><td class="mono">Fore.CYAN</td><td><span style="color:#00cccc">Cyan</span></td><td><span class="cp-cyan">foo.</span></td></tr>
+        <tr><td>Frame range + padding</td><td class="mono">Style.BRIGHT</td><td><span style="color:#fff; font-weight:bold">Bright white</span></td><td><span class="cp-bright">0-4#4</span></td></tr>
+        <tr><td>Extension</td><td class="mono">Fore.GREEN</td><td><span style="color:#00cc00">Green</span></td><td><span class="cp-green">.exr</span></td></tr>
+        <tr><td>Non-sequence file</td><td class="mono">Fore.YELLOW</td><td><span style="color:#cccc00">Yellow</span></td><td><span class="cp-yellow">readme.txt</span></td></tr>
+      </table>
+
+      <p style="font-size:12px; color:var(--text-muted); margin-top:12px;">
+        <strong>Note:</strong> <code>format_output</code> calls <code>item._format_frame_range()</code> directly rather than
+        using <code>item.format()</code> — it needs the individual pieces (base, range, padding, extension) to color them separately.
+        This is a design coupling between cli.py and sequence.py's internal API.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FULL TRACE PANEL ==================== -->
+<div class="panel" id="panel-trace">
+  <h2 style="font-size:16px; margin-bottom:16px;">Full Data Flow Trace – Step by Step</h2>
+  <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+    Walk through every transformation from <code>lss -s count --color=always ./test_data</code> to final output.
+  </p>
+
+  <div class="playback">
+    <button class="play-btn" id="trace-prev" onclick="traceStep(-1)">&#9664; Prev</button>
+    <button class="play-btn" id="trace-next" onclick="traceStep(1)">Next &#9654;</button>
+    <button class="play-btn" onclick="traceAutoPlay()" id="trace-play" style="background:var(--accent-green);">&#9654; Auto-play</button>
+    <span class="step-indicator" id="trace-indicator">Step 1 / 14</span>
+  </div>
+
+  <div class="step-container" id="trace-steps">
+    <!-- Steps generated by JS -->
+  </div>
+</div>
+
+<!-- ==================== SCENARIOS PANEL ==================== -->
+<div class="panel" id="panel-scenarios">
+  <h2 style="font-size:16px; margin-bottom:16px;">Interactive Scenarios</h2>
+  <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">
+    Pick a scenario to see the complete data transformation at each stage.
+  </p>
+
+  <div class="scenario-controls">
+    <button class="scenario-btn active" onclick="runScenario('basic')">Basic (lss test_data)</button>
+    <button class="scenario-btn new-scenario" onclick="runScenario('sort-count')">Sort by count</button>
+    <button class="scenario-btn new-scenario" onclick="runScenario('sort-ext')">Sort by extension</button>
+    <button class="scenario-btn new-scenario" onclick="runScenario('sort-frame-rev')">Sort by frame (reversed)</button>
+    <button class="scenario-btn new-scenario" onclick="runScenario('color-always')">Color = always</button>
+    <button class="scenario-btn new-scenario" onclick="runScenario('color-never')">Color = never</button>
+    <button class="scenario-btn new-scenario" onclick="runScenario('combined')">Combined: -s ext -r --color=always</button>
+  </div>
+
+  <div id="scenario-output">
+    <!-- Filled by JS -->
+  </div>
+</div>
+
+<!-- ==================== DIFF PANEL ==================== -->
+<div class="panel" id="panel-diff">
+  <h2 style="font-size:16px; margin-bottom:16px;">Baseline vs Updated – Side by Side</h2>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <h3>group_files() signature</h3>
+    </div>
+    <div class="card-body">
+      <div class="comparison">
+        <div>
+          <div class="col-header col-baseline">Baseline</div>
+          <pre><span class="kw">def</span> <span class="fn">group_files</span>(
+    filenames: <span class="type">list</span>[<span class="type">str</span>],
+) -> <span class="type">list</span>[FileSequence | <span class="type">str</span>]:
+    <span class="cmt"># ...</span>
+    result.sort(key=<span class="kw">lambda</span> x:
+        x.format() <span class="kw">if</span> <span class="kw">isinstance</span>(x, FileSequence)
+        <span class="kw">else</span> x
+    )</pre>
+        </div>
+        <div>
+          <div class="col-header col-updated">Updated</div>
+          <pre><span class="kw">def</span> <span class="fn">group_files</span>(
+    filenames: <span class="type">list</span>[<span class="type">str</span>],
+<span class="line-new">    sort_by: <span class="type">str</span> = SortOrder.NAME,</span>
+<span class="line-new">    reverse: <span class="type">bool</span> = <span class="kw">False</span>,</span>
+) -> <span class="type">list</span>[FileSequence | <span class="type">str</span>]:
+    <span class="cmt"># ...</span>
+<span class="line-new">    <span class="kw">def</span> <span class="fn">sort_key</span>(item):</span>
+<span class="line-new">        <span class="cmt"># multi-field tuple sort</span></span>
+<span class="line-new">    result.sort(key=sort_key, reverse=reverse)</span></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <h3>format_output()</h3>
+    </div>
+    <div class="card-body">
+      <div class="comparison">
+        <div>
+          <div class="col-header col-baseline">Baseline</div>
+          <pre><span class="kw">def</span> <span class="fn">format_output</span>(item):
+    <span class="kw">if</span> <span class="kw">isinstance</span>(item, FileSequence):
+        <span class="kw">return</span> item.format()
+    <span class="kw">return</span> item</pre>
+        </div>
+        <div>
+          <div class="col-header col-updated">Updated</div>
+          <pre><span class="kw">def</span> <span class="fn">format_output</span>(item, <span class="new-hl">use_color=False</span>):
+    <span class="kw">if</span> <span class="kw">isinstance</span>(item, FileSequence):
+        formatted = item.format()
+        <span class="kw">if</span> use_color:
+<span class="line-new">            <span class="kw">return</span> (</span>
+<span class="line-new">              Fore.CYAN + item.base + RESET</span>
+<span class="line-new">              + BRIGHT + range#pad + RESET</span>
+<span class="line-new">              + Fore.GREEN + ext + RESET</span>
+<span class="line-new">            )</span>
+        <span class="kw">return</span> formatted
+    <span class="kw">if</span> use_color:
+<span class="line-new">        <span class="kw">return</span> Fore.YELLOW + item + RESET</span>
+    <span class="kw">return</span> item</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <h3>main() – CLI argument additions</h3>
+    </div>
+    <div class="card-body">
+      <div class="comparison">
+        <div>
+          <div class="col-header col-baseline">Baseline</div>
+          <pre><span class="cmt"># Arguments:</span>
+  path   (positional, optional)
+
+<span class="cmt"># Call chain:</span>
+filenames = list_directory(path)
+grouped = group_files(filenames)
+<span class="kw">for</span> item <span class="kw">in</span> grouped:
+    print(format_output(item))</pre>
+        </div>
+        <div>
+          <div class="col-header col-updated">Updated</div>
+          <pre><span class="cmt"># Arguments:</span>
+  path   (positional, optional)
+<span class="line-new">  -a / --all          (hidden files)</span>
+<span class="line-new">  -L / --follow-symlinks</span>
+<span class="line-new">  -s / --sort [name|frame|count|ext]</span>
+<span class="line-new">  -r / --reverse</span>
+<span class="line-new">  --color [auto|always|never]</span>
+
+<span class="cmt"># Call chain:</span>
+filenames, errors = list_directory(path,
+    include_hidden, follow_symlinks)
+<span class="line-new">use_color = ... <span class="cmt"># decision matrix</span></span>
+grouped = group_files(filenames,
+<span class="line-new">    sort_by=args.sort_by,</span>
+<span class="line-new">    reverse=args.reverse)</span>
+<span class="kw">for</span> item <span class="kw">in</span> grouped:
+    print(format_output(item, <span class="new-hl">use_color</span>))</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="arrow open">&#9654;</span>
+      <h3>Output comparison (test_data/)</h3>
+    </div>
+    <div class="card-body">
+      <div class="comparison">
+        <div>
+          <div class="col-header col-baseline">Baseline: lss test_data</div>
+          <pre>bar.1-3#3.exr
+foo.0-4#4.exr
+readme.txt</pre>
+        </div>
+        <div>
+          <div class="col-header col-updated">Updated: lss -s count -r --color=always test_data</div>
+          <div class="color-preview" style="margin-top:8px;">
+            <div><span class="cp-cyan">foo.</span><span class="cp-bright">0-4#4</span><span class="cp-green">.exr</span> <span style="color:var(--text-muted); font-size:11px;">← 5 frames (first)</span></div>
+            <div><span class="cp-cyan">bar.</span><span class="cp-bright">1-3#3</span><span class="cp-green">.exr</span> <span style="color:var(--text-muted); font-size:11px;">← 3 frames</span></div>
+            <div><span class="cp-yellow">readme.txt</span> <span style="color:var(--text-muted); font-size:11px;">← 1 "frame" (non-seq)</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end .content -->
+
+<script>
+// Panel navigation
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  // Find the matching nav button
+  const buttons = document.querySelectorAll('.nav button');
+  buttons.forEach(b => {
+    if (b.textContent.toLowerCase().includes(id.replace('-', ' ').split(' ')[0]) ||
+        (id === 'overview' && b.textContent.includes('Overview')) ||
+        (id === 'architecture' && b.textContent.includes('Architecture')) ||
+        (id === 'parser' && b.textContent.includes('Parser')) ||
+        (id === 'directory' && b.textContent.includes('Directory')) ||
+        (id === 'sorting' && b.textContent.includes('Sorting')) ||
+        (id === 'color' && b.textContent.includes('Color')) ||
+        (id === 'trace' && b.textContent.includes('Full Trace')) ||
+        (id === 'scenarios' && b.textContent.includes('Scenarios')) ||
+        (id === 'diff' && b.textContent.includes('Baseline'))) {
+      b.classList.add('active');
+    }
+  });
+  // Initialize trace panel if needed
+  if (id === 'trace' && !traceInitialized) initTrace();
+  if (id === 'sorting') showSortDemo('name');
+  if (id === 'scenarios') runScenario('basic');
+}
+
+// Card toggle
+function toggleCard(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('.arrow');
+  body.classList.toggle('collapsed');
+  arrow.classList.toggle('open');
+}
+
+// ==================== SORT DEMO ====================
+const sortDemoData = [
+  { type: 'seq', base: 'foo.', padding: 4, ext: '.exr', frames: [0,1,2,3,4], formatted: 'foo.0-4#4.exr' },
+  { type: 'seq', base: 'bar.', padding: 3, ext: '.exr', frames: [1,2,3], formatted: 'bar.1-3#3.exr' },
+  { type: 'str', name: 'readme.txt' },
+  { type: 'seq', base: 'render.', padding: 4, ext: '.png', frames: [0,1,2,3,4,5,6,7,8,9], formatted: 'render.0-9#4.png' },
+];
+
+function showSortDemo(mode) {
+  document.querySelectorAll('#panel-sorting .scenario-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  let items = sortDemoData.map(d => {
+    let name = d.type === 'seq' ? d.formatted : d.name;
+    let firstFrame = d.type === 'seq' ? Math.min(...d.frames) : 0;
+    let count = d.type === 'seq' ? d.frames.length : 1;
+    let ext = d.type === 'seq' ? d.ext.toLowerCase() : (d.name.includes('.') ? d.name.split('.').pop().toLowerCase() : '');
+    let key;
+    switch (mode) {
+      case 'frame': key = [firstFrame, name]; break;
+      case 'count': key = [count, name]; break;
+      case 'extension': key = [ext, name]; break;
+      default: key = [name]; break;
+    }
+    return { ...d, name, firstFrame, count, ext, key, keyStr: '(' + key.map(k => JSON.stringify(k)).join(', ') + ')' };
+  });
+  // Sort
+  items.sort((a, b) => {
+    for (let i = 0; i < Math.max(a.key.length, b.key.length); i++) {
+      let av = a.key[i] ?? '', bv = b.key[i] ?? '';
+      if (av < bv) return -1;
+      if (av > bv) return 1;
+    }
+    return 0;
+  });
+
+  let html = '<table class="trace-table"><tr><th>#</th><th>Item</th><th>sort_key tuple</th><th>firstFrame</th><th>count</th><th>ext</th></tr>';
+  items.forEach((it, i) => {
+    html += `<tr>
+      <td>${i + 1}</td>
+      <td class="mono">${it.name}</td>
+      <td style="color:var(--new-feature);">${it.keyStr}</td>
+      <td>${it.firstFrame}</td>
+      <td>${it.count}</td>
+      <td>${it.ext}</td>
+    </tr>`;
+  });
+  html += '</table>';
+  document.getElementById('sort-demo-output').innerHTML = html;
+}
+
+// ==================== FULL TRACE ====================
+let traceInitialized = false;
+let currentTraceStep = 0;
+const traceData = [
+  {
+    label: 'CLI invocation',
+    file: 'cli.py:main()',
+    data: 'sys.argv = ["lss", "-s", "count", "--color=always", "./test_data"]',
+    isNew: false,
+  },
+  {
+    label: 'argparse parses arguments',
+    file: 'cli.py:96-144',
+    data: 'args.path = "./test_data"\nargs.sort_by = "count"        ← NEW\nargs.reverse = False           ← NEW\nargs.color = "always"          ← NEW\nargs.include_hidden = False\nargs.follow_symlinks = False',
+    isNew: true,
+  },
+  {
+    label: 'Determine use_color',
+    file: 'cli.py:147-152',
+    data: 'args.color == "always" → check COLORAMA_AVAILABLE\nCOLORAMA_AVAILABLE = True (colorama installed)\n∴ use_color = True',
+    isNew: true,
+  },
+  {
+    label: 'Windows colorama.init()',
+    file: 'cli.py:155-156',
+    data: 'os.name == "nt" → True (Windows)\ncolorama.init()  ← enables ANSI codes on Windows terminal',
+    isNew: true,
+  },
+  {
+    label: 'Validate path',
+    file: 'cli.py:157-163',
+    data: 'Path("./test_data").exists() → True\nPath("./test_data").is_dir()  → True\n✓ proceed',
+    isNew: false,
+  },
+  {
+    label: 'list_directory()',
+    file: 'cli.py:32-73',
+    data: 'path.iterdir() → 9 entries\nFilter: is_file only, skip hidden\n\nReturn: (["bar.001.exr", "bar.002.exr", "bar.003.exr",\n          "foo.0000.exr", "foo.0001.exr", "foo.0002.exr",\n          "foo.0003.exr", "foo.0004.exr", "readme.txt"],\n         [])  ← no errors',
+    isNew: false,
+  },
+  {
+    label: 'parse_filename() × 9',
+    file: 'parser.py:parse_filename()',
+    data: '"bar.001.exr"  → ParsedFile(base="bar.", frame=1,  pad=3, ext=".exr")\n"bar.002.exr"  → ParsedFile(base="bar.", frame=2,  pad=3, ext=".exr")\n"bar.003.exr"  → ParsedFile(base="bar.", frame=3,  pad=3, ext=".exr")\n"foo.0000.exr" → ParsedFile(base="foo.", frame=0,  pad=4, ext=".exr")\n"foo.0001.exr" → ParsedFile(base="foo.", frame=1,  pad=4, ext=".exr")\n"foo.0002.exr" → ParsedFile(base="foo.", frame=2,  pad=4, ext=".exr")\n"foo.0003.exr" → ParsedFile(base="foo.", frame=3,  pad=4, ext=".exr")\n"foo.0004.exr" → ParsedFile(base="foo.", frame=4,  pad=4, ext=".exr")\n"readme.txt"   → None (no frame number)',
+    isNew: false,
+  },
+  {
+    label: 'Group by sequence_key',
+    file: 'grouper.py',
+    data: 'Key ("bar.", 3, ".exr") → [bar.001, bar.002, bar.003]  (3 files)\nKey ("foo.", 4, ".exr") → [foo.0000..foo.0004]           (5 files)\n\nnon_sequence = ["readme.txt"]',
+    isNew: false,
+  },
+  {
+    label: 'Build FileSequence objects',
+    file: 'grouper.py',
+    data: 'FileSequence(base="bar.", pad=3, ext=".exr", frames=[1,2,3])\nFileSequence(base="foo.", pad=4, ext=".exr", frames=[0,1,2,3,4])\n\nresult = [barSeq, fooSeq, "readme.txt"]',
+    isNew: false,
+  },
+  {
+    label: 'Compute sort keys (sort_by="count")',
+    file: 'grouper.py:sort_key()',
+    data: 'barSeq       → sort_key = (3, "bar.1-3#3.exr")     ← 3 frames\nfooSeq       → sort_key = (5, "foo.0-4#4.exr")     ← 5 frames\n"readme.txt" → sort_key = (1, "readme.txt")         ← count=1 for str\n\nSorted ascending by count: readme.txt, barSeq, fooSeq',
+    isNew: true,
+  },
+  {
+    label: 'result.sort(key=sort_key, reverse=False)',
+    file: 'grouper.py',
+    data: 'Final order:\n  1. "readme.txt"                   (count=1)\n  2. FileSequence bar.1-3#3.exr      (count=3)\n  3. FileSequence foo.0-4#4.exr      (count=5)',
+    isNew: true,
+  },
+  {
+    label: 'format_output(item, use_color=True) × 3',
+    file: 'cli.py:format_output()',
+    data: '"readme.txt" (str, use_color=True)\n  → Fore.YELLOW + "readme.txt" + Style.RESET_ALL\n  → "\\x1b[33mreadme.txt\\x1b[0m"\n\nbarSeq (FileSequence, use_color=True)\n  → Fore.CYAN + "bar." + RESET\n     + BRIGHT + "1-3" + "#3" + RESET\n     + Fore.GREEN + ".exr" + RESET\n  → "\\x1b[36mbar.\\x1b[0m\\x1b[1m1-3#3\\x1b[0m\\x1b[32m.exr\\x1b[0m"\n\nfooSeq (FileSequence, use_color=True)\n  → "\\x1b[36mfoo.\\x1b[0m\\x1b[1m0-4#4\\x1b[0m\\x1b[32m.exr\\x1b[0m"',
+    isNew: true,
+  },
+  {
+    label: 'print() to stdout',
+    file: 'cli.py:173',
+    data: 'Line 1: \\x1b[33mreadme.txt\\x1b[0m\nLine 2: \\x1b[36mbar.\\x1b[0m\\x1b[1m1-3#3\\x1b[0m\\x1b[32m.exr\\x1b[0m\nLine 3: \\x1b[36mfoo.\\x1b[0m\\x1b[1m0-4#4\\x1b[0m\\x1b[32m.exr\\x1b[0m',
+    isNew: true,
+  },
+  {
+    label: 'Terminal renders',
+    file: 'stdout (tty)',
+    data: '  readme.txt        (yellow)\n  bar.1-3#3.exr     (cyan.bright.green)\n  foo.0-4#4.exr     (cyan.bright.green)\n\nOrdered by count: 1, 3, 5 frames',
+    isNew: true,
+  },
+];
+
+function initTrace() {
+  const container = document.getElementById('trace-steps');
+  container.innerHTML = '';
+  traceData.forEach((step, i) => {
+    const div = document.createElement('div');
+    div.className = 'step' + (step.isNew ? ' new-step' : '') + (i === 0 ? ' active' : '');
+    div.id = 'trace-step-' + i;
+    div.innerHTML = `
+      <div class="step-num">${i + 1}</div>
+      <div class="step-content">
+        <div class="step-label">${step.label}${step.isNew ? ' <span style="color:var(--new-feature); font-size:10px;">● NEW</span>' : ''}</div>
+        <div class="step-data">${step.data}</div>
+        <div class="step-file">${step.file}</div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  traceInitialized = true;
+  currentTraceStep = 0;
+  updateTraceIndicator();
+}
+
+function traceStep(dir) {
+  const next = currentTraceStep + dir;
+  if (next < 0 || next >= traceData.length) return;
+  document.getElementById('trace-step-' + currentTraceStep).classList.remove('active');
+  document.getElementById('trace-step-' + currentTraceStep).classList.add('completed');
+  if (dir < 0) {
+    document.getElementById('trace-step-' + currentTraceStep).classList.remove('completed');
+    document.getElementById('trace-step-' + next).classList.remove('completed');
+  }
+  currentTraceStep = next;
+  document.getElementById('trace-step-' + currentTraceStep).classList.add('active');
+  document.getElementById('trace-step-' + currentTraceStep).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  updateTraceIndicator();
+}
+
+function updateTraceIndicator() {
+  document.getElementById('trace-indicator').textContent = `Step ${currentTraceStep + 1} / ${traceData.length}`;
+}
+
+let autoPlayInterval = null;
+function traceAutoPlay() {
+  const btn = document.getElementById('trace-play');
+  if (autoPlayInterval) {
+    clearInterval(autoPlayInterval);
+    autoPlayInterval = null;
+    btn.textContent = '▶ Auto-play';
+    btn.style.background = 'var(--accent-green)';
+    return;
+  }
+  btn.textContent = '⏸ Pause';
+  btn.style.background = 'var(--accent-orange)';
+  // Reset if at end
+  if (currentTraceStep >= traceData.length - 1) {
+    document.querySelectorAll('.step').forEach(s => {
+      s.classList.remove('active', 'completed');
+    });
+    currentTraceStep = 0;
+    document.getElementById('trace-step-0').classList.add('active');
+    updateTraceIndicator();
+  }
+  autoPlayInterval = setInterval(() => {
+    if (currentTraceStep >= traceData.length - 1) {
+      clearInterval(autoPlayInterval);
+      autoPlayInterval = null;
+      btn.textContent = '▶ Auto-play';
+      btn.style.background = 'var(--accent-green)';
+      return;
+    }
+    traceStep(1);
+  }, 1500);
+}
+
+// ==================== SCENARIOS ====================
+const scenarios = {
+  basic: {
+    title: 'lss test_data',
+    desc: 'Default: sort by name, no color (piped/no tty)',
+    args: { path: 'test_data', sort_by: 'name', reverse: false, color: 'never' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'seq', fmt:'bar.1-3#3.exr', base:'bar.', frames:[1,2,3], pad:3, ext:'.exr' },
+      { type:'seq', fmt:'foo.0-4#4.exr', base:'foo.', frames:[0,1,2,3,4], pad:4, ext:'.exr' },
+      { type:'str', fmt:'readme.txt' },
+    ],
+    output: ['bar.1-3#3.exr', 'foo.0-4#4.exr', 'readme.txt'],
+    colorOutput: null,
+  },
+  'sort-count': {
+    title: 'lss -s count test_data',
+    desc: 'Sort by frame count ascending',
+    args: { path: 'test_data', sort_by: 'count', reverse: false, color: 'never' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'str', fmt:'readme.txt', sortKey:'(1, "readme.txt")' },
+      { type:'seq', fmt:'bar.1-3#3.exr', base:'bar.', frames:[1,2,3], pad:3, ext:'.exr', sortKey:'(3, "bar.1-3#3.exr")' },
+      { type:'seq', fmt:'foo.0-4#4.exr', base:'foo.', frames:[0,1,2,3,4], pad:4, ext:'.exr', sortKey:'(5, "foo.0-4#4.exr")' },
+    ],
+    output: ['readme.txt', 'bar.1-3#3.exr', 'foo.0-4#4.exr'],
+    colorOutput: null,
+  },
+  'sort-ext': {
+    title: 'lss -s extension test_data',
+    desc: 'Sort by file extension',
+    args: { path: 'test_data', sort_by: 'extension', reverse: false, color: 'never' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'seq', fmt:'bar.1-3#3.exr', sortKey:'(".exr", "bar.1-3#3.exr")' },
+      { type:'seq', fmt:'foo.0-4#4.exr', sortKey:'(".exr", "foo.0-4#4.exr")' },
+      { type:'str', fmt:'readme.txt', sortKey:'("txt", "readme.txt")' },
+    ],
+    output: ['bar.1-3#3.exr', 'foo.0-4#4.exr', 'readme.txt'],
+    colorOutput: null,
+  },
+  'sort-frame-rev': {
+    title: 'lss -s frame -r test_data',
+    desc: 'Sort by first frame, reversed (highest first)',
+    args: { path: 'test_data', sort_by: 'frame', reverse: true, color: 'never' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'seq', fmt:'bar.1-3#3.exr', sortKey:'(1, "bar.1-3#3.exr")' },
+      { type:'seq', fmt:'foo.0-4#4.exr', sortKey:'(0, "foo.0-4#4.exr")' },
+      { type:'str', fmt:'readme.txt', sortKey:'(0, "readme.txt")' },
+    ],
+    output: ['bar.1-3#3.exr', 'foo.0-4#4.exr', 'readme.txt'],
+    note: 'Reversed: bar(frame=1) first, then foo(frame=0) & readme(frame=0) by name',
+    colorOutput: null,
+  },
+  'color-always': {
+    title: 'lss --color=always test_data',
+    desc: 'Force color output',
+    args: { path: 'test_data', sort_by: 'name', reverse: false, color: 'always' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'seq', fmt:'bar.1-3#3.exr', base:'bar.', range:'1-3#3', ext:'.exr' },
+      { type:'seq', fmt:'foo.0-4#4.exr', base:'foo.', range:'0-4#4', ext:'.exr' },
+      { type:'str', fmt:'readme.txt' },
+    ],
+    output: ['bar.1-3#3.exr', 'foo.0-4#4.exr', 'readme.txt'],
+    colorOutput: [
+      '<span class="cp-cyan">bar.</span><span class="cp-bright">1-3#3</span><span class="cp-green">.exr</span>',
+      '<span class="cp-cyan">foo.</span><span class="cp-bright">0-4#4</span><span class="cp-green">.exr</span>',
+      '<span class="cp-yellow">readme.txt</span>',
+    ],
+  },
+  'color-never': {
+    title: 'lss --color=never test_data',
+    desc: 'Suppress color output',
+    args: { path: 'test_data', sort_by: 'name', reverse: false, color: 'never' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'seq', fmt:'bar.1-3#3.exr' },
+      { type:'seq', fmt:'foo.0-4#4.exr' },
+      { type:'str', fmt:'readme.txt' },
+    ],
+    output: ['bar.1-3#3.exr', 'foo.0-4#4.exr', 'readme.txt'],
+    colorOutput: null,
+  },
+  combined: {
+    title: 'lss -s extension -r --color=always test_data',
+    desc: 'Sort by extension reversed + color',
+    args: { path: 'test_data', sort_by: 'extension', reverse: true, color: 'always' },
+    input: ['bar.001.exr','bar.002.exr','bar.003.exr','foo.0000.exr','foo.0001.exr','foo.0002.exr','foo.0003.exr','foo.0004.exr','readme.txt'],
+    grouped: [
+      { type:'str', fmt:'readme.txt', sortKey:'("txt", "readme.txt")' },
+      { type:'seq', fmt:'foo.0-4#4.exr', sortKey:'(".exr", "foo.0-4#4.exr")', base:'foo.', range:'0-4#4', ext:'.exr' },
+      { type:'seq', fmt:'bar.1-3#3.exr', sortKey:'(".exr", "bar.1-3#3.exr")', base:'bar.', range:'1-3#3', ext:'.exr' },
+    ],
+    output: ['readme.txt', 'foo.0-4#4.exr', 'bar.1-3#3.exr'],
+    colorOutput: [
+      '<span class="cp-yellow">readme.txt</span>',
+      '<span class="cp-cyan">foo.</span><span class="cp-bright">0-4#4</span><span class="cp-green">.exr</span>',
+      '<span class="cp-cyan">bar.</span><span class="cp-bright">1-3#3</span><span class="cp-green">.exr</span>',
+    ],
+    note: 'Reversed extension sort: "txt" > ".exr", so readme.txt first. Within .exr, reversed alpha: foo before bar.',
+  },
+};
+
+function runScenario(id) {
+  document.querySelectorAll('#panel-scenarios .scenario-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const s = scenarios[id];
+  let html = `<div class="card" style="margin-top:12px;">
+    <div class="card-header"><h3 style="flex:1">${s.title}</h3><span style="font-size:11px;color:var(--text-muted)">${s.desc}</span></div>
+    <div class="card-body">`;
+
+  // Args
+  html += `<h4 style="font-size:12px; margin-bottom:8px;">Parsed arguments:</h4>
+    <pre>`;
+  for (const [k, v] of Object.entries(s.args)) {
+    const isNew = ['sort_by', 'reverse', 'color'].includes(k);
+    html += isNew ? `<span class="line-new">${k}: ${JSON.stringify(v)}</span>\n` : `${k}: ${JSON.stringify(v)}\n`;
+  }
+  html += `</pre>`;
+
+  // Input files
+  html += `<h4 style="font-size:12px; margin:12px 0 8px;">Input files (from list_directory):</h4>
+    <pre>${s.input.join('\n')}</pre>`;
+
+  // Grouped + sort keys
+  html += `<h4 style="font-size:12px; margin:12px 0 8px;">After group_files():</h4><table class="trace-table">
+    <tr><th>#</th><th>Type</th><th>Formatted</th><th>Sort key</th></tr>`;
+  s.grouped.forEach((g, i) => {
+    const sk = g.sortKey || '-';
+    html += `<tr><td>${i+1}</td><td style="color:${g.type==='seq'?'var(--accent-cyan)':'var(--accent-orange)'}">${g.type==='seq'?'FileSequence':'str'}</td>
+      <td class="mono">${g.fmt}</td><td style="color:var(--new-feature);">${sk}</td></tr>`;
+  });
+  html += `</table>`;
+
+  if (s.note) {
+    html += `<p style="font-size:11px; color:var(--accent-orange); margin-top:8px;">⚡ ${s.note}</p>`;
+  }
+
+  // Output
+  html += `<h4 style="font-size:12px; margin:12px 0 8px;">Final output (stdout):</h4>`;
+  if (s.colorOutput) {
+    html += `<div class="color-preview">`;
+    s.colorOutput.forEach(line => { html += `<div>${line}</div>`; });
+    html += `</div>`;
+  } else {
+    html += `<pre>${s.output.join('\n')}</pre>`;
+  }
+
+  html += `</div></div>`;
+  document.getElementById('scenario-output').innerHTML = html;
+}
+
+// Init
+showSortDemo('name');
+</script>
+</body>
+</html>
